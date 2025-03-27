@@ -22,7 +22,6 @@ model.fit(X_train, y_train)
 # Compute model accuracy
 model_accuracy = round(model.score(X_test, y_test) * 100, 2)  # Accuracy in percentage
 
-
 @motor_state_bp.route('/api/state', methods=['GET'])
 def get_motor_state():
     
