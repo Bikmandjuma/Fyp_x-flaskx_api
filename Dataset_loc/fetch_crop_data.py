@@ -8,21 +8,6 @@ from Dataset_loc.laravel_url_api import Laravel_url_api  # Laravel API URL
 
 motor_state_bp = Blueprint('motor_state_bp', __name__)
 
-# Load dataset and train model once
-data = dataset()
-
-X = data[['temperature', 'vibration']]
-y = data['state']
-
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-model = RandomForestClassifier(n_estimators=100, random_state=0)
-model.fit(X_train, y_train)
-
-# Compute model accuracy
-model_accuracy = round(model.score(X_test, y_test) * 100, 2)  # Accuracy in percentage
-
-
 @motor_state_bp.route('/api/state', methods=['GET'])
 def get_motor_state():
     
@@ -39,19 +24,28 @@ def get_motor_state():
     if not all(field in data_from_laravel for field in required_fields):
         return jsonify({"message": "Missing necessary data for prediction"}), 400
 
-    # Convert string values to float
-    try:
-        temp = float(data_from_laravel['temperature'])
-        vib = float(data_from_laravel['vibration'])
-    except ValueError:
-        return jsonify({"message": "Invalid data format. Temperature and Vibration should be numeric."}), 400
+    # Load dataset
+    data = dataset()  
 
-    # Validate input values
-    if temp <= 0 or vib < 0:
-        return jsonify({"message": "Invalid input values for prediction."}), 400
+    X = data[['temperature', 'vibration']]
+    y = data['state']
+
+    # Split data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Train model
+    model = RandomForestClassifier(n_estimators=100, random_state=0)
+    model.fit(X_train, y_train)
 
     # Prepare new data for prediction
-    new_data = pd.DataFrame({"temperature": [temp], "vibration": [vib]})
+    new_data = pd.DataFrame({
+        "temperature": [data_from_laravel['temperature']],
+        "vibration": [data_from_laravel['vibration']]
+    })
+
+    # Validate input values
+    if new_data['temperature'][0] <= 0 or new_data['vibration'][0] < 0:
+        return jsonify({"message": "Invalid input values for prediction."}), 400
 
     # Make prediction
     predicted_probabilities = model.predict_proba(new_data)
@@ -64,10 +58,7 @@ def get_motor_state():
         return jsonify({"message": "Unable to determine motor state."})
     else:
         most_probable_state = filtered_predictions.index[0]
-        most_probable_prob = filtered_predictions.iloc[0, 0]
-
         return jsonify({
-            "model_accuracy": model_accuracy,  # Precomputed accuracy
-            "most_probable_state": most_probable_state,
-            "predicted_probability": round(most_probable_prob, 2)  # Show only top prediction
+            "predicted_probabilities": filtered_predictions.to_dict(),
+            "most_probable_state": most_probable_state
         })
